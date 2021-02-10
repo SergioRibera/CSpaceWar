@@ -26,7 +26,9 @@ void ObjectField::erase(size_t i) {
 }
 
 std::vector<SpaceObject> ObjectField::getData() const  { return object_set; }
-
+void ObjectField::clear(){
+    object_set.clear();
+}
 void ObjectField::setBounds(rect a) { field_bounds = a; }
 
 

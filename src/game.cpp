@@ -332,8 +332,8 @@ void run() {
                     tick = 0;
                     player.pos = { x()/2, y()/2 };
                     player.energy = 100;
-                    stars.getData().clear();
-                    asteroids.getData().clear();
+                    stars.clear();
+                    asteroids.clear();
                     in_char = 0;
                     game_over = false;
                     player_points = 0;

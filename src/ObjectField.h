@@ -22,7 +22,7 @@ public:
     void update();
     void erase(size_t);
     std::vector<SpaceObject> getData() const;
-
+    void clear();
     void setBounds(rect);
 
 private:
