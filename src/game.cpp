@@ -33,10 +33,21 @@ struct {
     int energy;
 } player;
 
-
+uint_fast16_t x()
+{
+    int xdim, ydim;
+    getmaxyx(stdscr, ydim, xdim);
+    return xdim;
+}
+uint_fast16_t y()
+{
+    int xdim, ydim;
+    getmaxyx(stdscr, ydim, xdim);
+    return ydim;
+}
 
 int init() {
-    
+
     srand(time(0));
 
     initscr();
@@ -55,11 +66,11 @@ int init() {
     getmaxyx(main_wnd, cur_size.x, cur_size.y);
 
 
-   // define area for screen (default terminal size)
-   screen_area = { { 0, 0 }, { 80, 24 } };
+    // define area for screen (default terminal size)
+    screen_area = { {0, 0}, { x(), y() } };
 
-   // set screen size accordingly
-   wresize(main_wnd, screen_area.height(), screen_area.width());
+    // set screen size accordingly
+    wresize(main_wnd, screen_area.height(), screen_area.width());
 
 
     // initialize window areas
@@ -102,12 +113,12 @@ int init() {
 
 
 void run() {
-    
-    int tick = 0;
-   
+
+    int tick = 0, in_char = 0, player_points = 0;
+
     // initialize player
     player.disp_char = 'o';
-    player.pos = {10, 10};
+    player.pos = { x()/2, y()/2 };
     player.bounds = { { player.pos.x - 1, player.pos.y }, { 3, 2 } }; // player is 3 wide, 2 tall
     player.moving = false;
     player.energy = 100;
@@ -115,10 +126,8 @@ void run() {
     asteroids.setBounds(game_area);
     stars.setBounds(game_area);
 
-    int in_char = 0;
-    bool exit_requested = false;
-    bool game_over = false;
-   
+    bool exit_requested = false, game_over = false, game_pause = false;
+
     // draw frame around whole screen
     wattron(main_wnd, A_BOLD);
     box(main_wnd, 0, 0);
@@ -137,19 +146,16 @@ void run() {
 
     tick = 0;
     while(1) {
-
         // clear game window
         werase(game_wnd);
- 
-        // TODO: Give warning message if screen is too small!
         if(cur_size.x > screen_area.width() || cur_size.y > screen_area.height()) {}
         //winResize(cur_width, cur_height);
-    
+
         // read in input key, if any (non-blocking as defined earlier)
         in_char = wgetch(main_wnd);
         in_char = tolower(in_char);
 
-        
+
         switch(in_char) {
             case 'q': 
                 exit_requested = true; 
@@ -157,111 +163,137 @@ void run() {
             case KEY_UP:
             case 'w':
             case 'i':
-                if(player.pos.y > game_area.top())
+                if(player.pos.y > game_area.top() && !game_pause)
                     player.pos.y -= 1;
                 break;
             case KEY_DOWN:
             case 's':
             case 'k':
-                if(player.pos.y < game_area.bot() + 1)
+                if(player.pos.y < game_area.bot() + 1 && !game_pause)
                     player.pos.y += 1;
                 break;
             case KEY_LEFT: 
             case 'a':
             case 'j':
-                if(player.pos.x > game_area.left() + 1)
+                if(player.pos.x > game_area.left() + 1 && !game_pause)
                     player.pos.x -= 1;
                 break;
             case KEY_RIGHT: 
             case 'd':
             case 'l':
-                if(player.pos.x < game_area.right() - 2)
+                if(player.pos.x < game_area.right() - 2 && !game_pause)
                     player.pos.x += 1; 
+                break;
+            case 'p':
+                game_pause = !game_pause;
                 break;
             default: 
                 break;
         }
 
+        if(!game_pause){
+            if(tick % 7 == 0)
+                stars.update();
 
-        if(tick % 7 == 0)
-            stars.update();
+            if(tick > 100 && tick % 20 == 0)
+                asteroids.update();
 
-        if(tick > 100 && tick % 20 == 0)
-            asteroids.update();
-    
-        player.bounds = { { player.pos.x - 1, player.pos.y }, { 3, 2 } }; 
+            player.bounds = { { player.pos.x - 1, player.pos.y }, { 3, 2 } }; 
 
-        // collision detection
-        for(size_t i = 0; i < asteroids.getData().size(); i++) {
-            if(player.bounds.contains(asteroids.getData().at(i).getPos())) {
-                asteroids.erase(i); 
-                player.energy -= 10;
+            // collision detection
+            for(size_t i = 0; i < asteroids.getData().size(); i++) {
+                if(player.bounds.contains(asteroids.getData().at(i).getPos())) {
+                    asteroids.erase(i); 
+                    player.energy -= 10;
+                }
             }
-        }
 
-        if(player.energy <= 0)
-            game_over = true;
+            if(player.energy <= 0)
+                game_over = true;
 
 
-        // draw starry background
-        for(auto s : stars.getData())
-            mvwaddch(game_wnd, s.getPos().y, s.getPos().x, '.');  
+            // draw starry background
+            for(auto s : stars.getData())
+                mvwaddch(game_wnd, s.getPos().y, s.getPos().x, '.');  
 
-        // player ship main body
-        wattron(game_wnd, A_BOLD);
-        mvwaddch(game_wnd, player.pos.y, player.pos.x, player.disp_char); // (y, x)
-        wattroff(game_wnd, A_BOLD);
-
-        // player ship accessories
-        wattron(game_wnd, A_ALTCHARSET);
-        //mvaddch(player.pos.y - 1, player.pos.x, ACS_UARROW);
-        mvwaddch(game_wnd, player.pos.y, player.pos.x - 1, ACS_LARROW);
-        mvwaddch(game_wnd, player.pos.y, player.pos.x + 1, ACS_RARROW);
-
-        // animate engine flame :)
-        if(tick / 5 % 3) { // 5 ms cycle, 50% duty
-            wattron(game_wnd, COLOR_PAIR(tick % 2 ? 3 : 4));
-            mvwaddch(game_wnd, player.pos.y + 1, player.pos.x, ACS_UARROW);
-            wattroff(game_wnd, COLOR_PAIR(tick % 2 ? 3 : 4));
-        }
-
-        wattroff(game_wnd, A_ALTCHARSET);
-
-       
-        // draw asteroids
-        for(auto o : asteroids.getData()) {
+            // player ship main body
             wattron(game_wnd, A_BOLD);
-            mvwaddch(game_wnd, o.getPos().y, o.getPos().x, '*');
+            mvwaddch(game_wnd, player.pos.y, player.pos.x, player.disp_char); // (y, x)
             wattroff(game_wnd, A_BOLD);
+
+            // player ship accessories
+            wattron(game_wnd, A_ALTCHARSET);
+            //mvaddch(player.pos.y - 1, player.pos.x, ACS_UARROW);
+            mvwaddch(game_wnd, player.pos.y, player.pos.x - 1, ACS_LARROW);
+            mvwaddch(game_wnd, player.pos.y, player.pos.x + 1, ACS_RARROW);
+
+            // animate engine flame :)
+            if(tick / 5 % 3) { // 5 ms cycle, 50% duty
+                wattron(game_wnd, COLOR_PAIR(tick % 2 ? 3 : 4));
+                mvwaddch(game_wnd, player.pos.y + 1, player.pos.x, ACS_UARROW);
+                wattroff(game_wnd, COLOR_PAIR(tick % 2 ? 3 : 4));
+            }
+
+            wattroff(game_wnd, A_ALTCHARSET);
+
+
+            // draw asteroids
+            for(auto o : asteroids.getData()) {
+                wattron(game_wnd, A_BOLD);
+                mvwaddch(game_wnd, o.getPos().y, o.getPos().x, '*');
+                wattroff(game_wnd, A_BOLD);
+            }
+
+
+            // draw UI elements
+            // energy bar
+            wmove(main_wnd, game_area.bot() + 4, 1);
+            whline(main_wnd, ' ', 25); // health bar is 25 chars long
+            wmove(main_wnd, game_area.bot() + 4, 1);
+            drawEnergyBar(player.energy);
+
+            // draw static string to hold percentage
+            mvwprintw(main_wnd, game_area.bot() + 5, 1, " - E N E R G Y -      //");
+
+            // draw numeric percentage
+            wattron(main_wnd, A_BOLD);
+            if(player.energy <= 25) {
+                wattron(main_wnd, COLOR_PAIR(4));
+                if(tick % 100 < 50)
+                    mvwprintw(main_wnd, game_area.bot() + 5, 18, "%i%%", player.energy); 
+                wattroff(main_wnd, COLOR_PAIR(4));
+            } else
+                mvwprintw(main_wnd, game_area.bot() + 5, 18, "%i%%", player.energy); 
+            wattroff(main_wnd, A_BOLD);
+
+            // Print points
+            wattron(main_wnd, COLOR_PAIR(5));
+            wattron(main_wnd, A_BOLD);
+            mvwprintw(main_wnd, game_area.bot() + 5, game_area.width() - 60, "%i km", player_points);
+            wattroff(main_wnd, A_BOLD);
+            wattroff(main_wnd, COLOR_PAIR(5));
+
+            // fraw instructions
+            wattron(main_wnd, COLOR_PAIR(2));
+            wattron(main_wnd, A_BOLD);
+            mvwprintw(main_wnd, game_area.bot() + 5, game_area.width() - 40, "Press 'w,a,s,d' or 'j,k,l,i' to move");
+            wattroff(main_wnd, A_BOLD);
+            wattroff(main_wnd, COLOR_PAIR(2));
+
+            // refresh windows
+            wrefresh(main_wnd);
+            wrefresh(game_wnd);
+        }else{
+            const int xpos = game_area.width() / 2 - 3;
+            const int ypos = game_area.height() / 2 -2;
+            wattron(main_wnd, COLOR_PAIR(5));
+            wattron(main_wnd, A_BOLD);
+            mvwprintw(main_wnd, ypos, xpos + 3, "PAUSE");
+            mvwprintw(main_wnd, ypos + 3, xpos - 5,   "Press 'p' to continue");
+            mvwprintw(main_wnd, ypos + 5, xpos - 7, "Press 'q' to quit the game");
+            wattroff(main_wnd, A_BOLD);
+            wattroff(main_wnd, COLOR_PAIR(5));
         }
-
-
-        // draw UI elements
-        // energy bar
-        wmove(main_wnd, 20, 1);
-        whline(main_wnd, ' ', 25); // health bar is 25 chars long
-        wmove(main_wnd, 20, 1);
-        drawEnergyBar(player.energy);
-
-        // draw static string to hold percentage
-        mvwprintw(main_wnd, 21, 1, " - E N E R G Y -      //");
-
-        // draw numeric percentage
-        wattron(main_wnd, A_BOLD);
-        if(player.energy <= 25) {
-            wattron(main_wnd, COLOR_PAIR(4));
-            if(tick % 100 < 50)
-                mvwprintw(main_wnd, 21, 18, "%i%%", player.energy); 
-            wattroff(main_wnd, COLOR_PAIR(4));
-        } else
-            mvwprintw(main_wnd, 21, 18, "%i%%", player.energy); 
-        wattroff(main_wnd, A_BOLD);
-
-        //usleep(100);
-
-        // refresh windows
-        wrefresh(main_wnd);
-        wrefresh(game_wnd);
 
 
         if(game_over) {
@@ -282,11 +314,15 @@ void run() {
             wrefresh(main_wnd);
             wrefresh(game_wnd);
 
-            // TODO print out score 
             // print game over prompt 
             mvwprintw(game_wnd, ypos, xpos , "GAME OVER");
-            mvwprintw(game_wnd, ypos + 2, xpos - 7, "Press SPACE to play again");
-            mvwprintw(game_wnd, ypos + 4, xpos - 7, "Press 'q' to quit the game");
+            wattron(main_wnd, COLOR_PAIR(5));
+            wattron(main_wnd, A_BOLD);
+            mvwprintw(main_wnd, ypos + 3, xpos + 3, "%i km", player_points);
+            wattroff(main_wnd, A_BOLD);
+            wattroff(main_wnd, COLOR_PAIR(5));
+            mvwprintw(game_wnd, ypos + 5, xpos - 7, "Press SPACE to play again");
+            mvwprintw(game_wnd, ypos + 7, xpos - 7, "Press 'q' to quit the game");
 
             // loop until player either quits or restarts game
             while(1) {
@@ -294,12 +330,13 @@ void run() {
 
                 if(in_char == ' ') { // reset all variables and restart game
                     tick = 0;
-                    player.pos = {10, 10};  
+                    player.pos = { x()/2, y()/2 };
                     player.energy = 100;
                     stars.getData().clear();
                     asteroids.getData().clear();
                     in_char = 0;
                     game_over = false;
+                    player_points = 0;
                     exit_requested = false;
                     break;
                 }
@@ -310,25 +347,23 @@ void run() {
                 }
 
                 wrefresh(game_wnd);
-
-                tick++;
+                if(!game_pause || !game_over)
+                    tick++;
                 usleep(10000); // 1 ms
             }
         }
 
         if(exit_requested) break;
-
-        tick++;
-
-        //nanosleep({0, 1000000000}, NULL);
+        if(!game_pause || !game_over){
+            tick++;
+            if(tick % 20 > 15)
+                player_points++;
+        }
         usleep(10000); // 1 ms
     };
 
     delwin(main_wnd);
-
     endwin();
-
-    // if(game_over) printf("Game over!\n");
 }
 
 void setFrame(){
@@ -336,7 +371,7 @@ void setFrame(){
     attron(A_BOLD);
     box(main_wnd, 0, 0);
     attroff(A_BOLD);
-    
+
     // border characters can be set manually using the border function
     // border( wnd, leftside, rightside, topside, bottom side, tlcorner, 
     //                                      trcorner, blcorner, brcorner);
@@ -353,10 +388,10 @@ void winResize(int &orig_width, int &orig_height){
     if(new_width != orig_width || new_height != orig_height){
         orig_width = new_width;
         orig_height = new_height;
-        
+
         wresize(main_wnd, new_height, 0);
         mvwin(main_wnd, new_height, 0);
-        
+
         wclear(main_wnd);
         setFrame();
     }
@@ -380,7 +415,7 @@ void drawEnergyBar(int a) {
 
         wattron(main_wnd, COLOR_PAIR(col_pair));
         wattron(main_wnd, A_BOLD);
-        waddch(main_wnd, '/');
+        waddch(main_wnd, '=');
         wattroff(main_wnd, A_BOLD);
         wattroff(main_wnd, COLOR_PAIR(col_pair));
     }
